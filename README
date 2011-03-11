@@ -1,2 +1,26 @@
-RepRap Minihost README file
+==ABOUT==
+RepRap Minihost
+
+The RepRap Minihost is a control and g-code file transmitter 
+for RepRap 3D printers.
+The program is written in C++ using the Qt and boost library.
+
+
+==Compiling on Linux==
+First run
+$ qmake -project
+and edit the created .pro file. Add the libs line or 
+correct it so that it looks like this one:
+
+LIBS += -lboost_system -lboost_regex
+
+Then run
+$ qmake
+$ make
+
+==Compiling on Windows==
+Sorry, no idea ;)
+
+==Compiling on Mac==
+Sorry, no idea ;)
 
