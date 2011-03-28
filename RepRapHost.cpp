@@ -27,15 +27,11 @@
  */
 
 #include "RepRapHost.h"
+//#include <boost/config/warning_disable.hpp>
 #include <boost/spirit/include/qi.hpp>
 #include <boost/spirit/include/phoenix_core.hpp>
 #include <boost/spirit/include/phoenix_operator.hpp>
-
-using namespace boost::phoenix;
-using namespace boost::spirit;
-using namespace boost::spirit::qi;
-using namespace boost::spirit::ascii;
-using namespace boost::spirit::arg_names;
+#include <boost/spirit/include/phoenix_stl.hpp>
 
 RepRapHost::RepRapHost() :
 remainingTime(0.0),
@@ -100,6 +96,17 @@ double RepRapHost::getRemainingTime()
 
 Command* RepRapHost::addCommand(string cmdStr, bool putAtEnd)
 {
+	namespace qi = boost::spirit::qi;
+	namespace ascii = boost::spirit::ascii;
+	namespace phoenix = boost::phoenix;
+	using qi::double_;
+	using qi::int_;
+	using qi::phrase_parse;
+	using qi::_1;
+	using ascii::space;
+	using qi::lit;
+	using phoenix::ref;
+	
 	int g=-1;
 	int m=-1;
 	double newX=x;
@@ -201,7 +208,7 @@ Command* RepRapHost::addCommand(string cmdStr, bool putAtEnd)
 	if(putAtEnd)
 	{
 		commands.push_back(commandStruct);
-		return &(*commands.end());
+		return &commands.back();
 	}
 	else
 	{

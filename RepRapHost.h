@@ -21,7 +21,7 @@
 #include <string>
 #include <vector>
 #include "BoostComPort.hpp"
-#include <boost/regex.hpp> 
+#include <boost/regex.hpp>
 
 using namespace std;
 
