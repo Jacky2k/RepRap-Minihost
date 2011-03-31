@@ -662,6 +662,19 @@
      <bool>false</bool>
     </property>
    </widget>
+   <widget class="QCheckBox" name="checkAutoOpenPort">
+    <property name="geometry">
+     <rect>
+      <x>380</x>
+      <y>180</y>
+      <width>241</width>
+      <height>22</height>
+     </rect>
+    </property>
+    <property name="text">
+     <string>Open port at startup</string>
+    </property>
+   </widget>
   </widget>
   <widget class="QMenuBar" name="menubar">
    <property name="geometry">
@@ -669,7 +682,7 @@
      <x>0</x>
      <y>0</y>
      <width>636</width>
-     <height>23</height>
+     <height>25</height>
     </rect>
    </property>
   </widget>
@@ -1141,6 +1154,22 @@
     </hint>
    </hints>
   </connection>
+  <connection>
+   <sender>checkAutoOpenPort</sender>
+   <signal>stateChanged(int)</signal>
+   <receiver>RepRapMiniHostClass</receiver>
+   <slot>onCheckAutoOpenPort(int)</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>500</x>
+     <y>215</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>317</x>
+     <y>259</y>
+    </hint>
+   </hints>
+  </connection>
  </connections>
  <slots>
   <slot>onButtonCom()</slot>
@@ -1170,5 +1199,6 @@
   <slot>onButtonExecute()</slot>
   <slot>onButtonStop()</slot>
   <slot>onCheckDebugging(int)</slot>
+  <slot>onCheckAutoOpenPort(int)</slot>
  </slots>
 </ui>

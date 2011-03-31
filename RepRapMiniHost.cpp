@@ -50,9 +50,11 @@ RepRapMiniHost::RepRapMiniHost(QWidget *parent)
       extrudeWhenMoving(false),
       targetTempExtruder(230.0),
       targetTempBed(120.0),
-      debug(false)
+      debug(true),
+      autoOpenPort(false)
 {
 	ui.setupUi(this);
+	
 	repRapHost.setHashEnabled(false);
 	
 	statusBar = new QStatusBar();
@@ -61,20 +63,24 @@ RepRapMiniHost::RepRapMiniHost(QWidget *parent)
 	tempTimer = new QTimer(this);
 	connect(tempTimer, SIGNAL(timeout()), this, SLOT(onTempTimer()));
 	tempTimer->setInterval(tempReadTime);
-	if(autoRefreshTemperatures)
-		tempTimer->start();
 	
 	tickTimer = new QTimer(this);
 	connect(tickTimer, SIGNAL(timeout()), this, SLOT(onTickTimer()));
 	tickTimer->setInterval(10);
-	tickTimer->start();
 	
 	remainingTimeTimer = new QTimer(this);
 	connect(remainingTimeTimer, SIGNAL(timeout()), this, SLOT(onRemainingTimeTimer()));
 	remainingTimeTimer->setInterval(1000);
-	remainingTimeTimer->start();
-}
 
+	restoreValues();
+	
+	if(autoRefreshTemperatures)
+		tempTimer->start();
+	tickTimer->start();
+	remainingTimeTimer->start();
+	if(autoOpenPort)
+		onButtonCom();
+}
 /*
  * Maybe the above created instances of timers should be deleted
  * here, maybe Qt does this itself, no idea...
@@ -82,7 +88,101 @@ RepRapMiniHost::RepRapMiniHost(QWidget *parent)
  */
 RepRapMiniHost::~RepRapMiniHost()
 {
+	storeValues();
+}
+
+void RepRapMiniHost::restoreValues()
+{
+	if(debug)
+		cout<<"Restoring values..."<<endl;
 	
+	QCoreApplication::setOrganizationName("RepRap");
+	QCoreApplication::setOrganizationDomain("reprap.org");
+	QCoreApplication::setApplicationName("RepRap Minihost");
+	QSettings settings;
+	
+	debug = settings.value("debug", debug).toBool();
+	ui.checkDebugging->setChecked(debug);
+	repRapHost.setDebug(debug);
+	
+	extrudeWhenMoving=settings.value("extrudeWhenMoving", extrudeWhenMoving).toBool();
+	ui.checkExtrudeWhenMoving->setChecked(extrudeWhenMoving);
+	
+	autoRefreshTemperatures=settings.value("autoRefreshTemperatures", autoRefreshTemperatures).toBool();
+	ui.checkAutoRefreshTemperatures->setChecked(autoRefreshTemperatures);
+	
+	bool enableHashes=settings.value("enableHashes", false).toBool();
+	ui.checkEnableHashes->setChecked(enableHashes);
+	
+	ui.editComPort->setText(settings.value("comPort", "/dev/ttyUSB0").toString());
+	ui.editComBaud->setText(settings.value("comBaud", "19200").toString());
+	
+	bool ok;
+	steps=settings.value("steps", 1.0).toDouble(&ok);
+	if(!ok)
+		steps=1.0;
+	if(steps<0.2)
+	{
+		ui.radio01->setChecked(true);
+		ui.radio1->setChecked(false);
+		ui.radio10->setChecked(false);
+	}
+	else if(steps<1.1)
+	{
+		ui.radio01->setChecked(false);
+		ui.radio1->setChecked(true);
+		ui.radio10->setChecked(false);
+	}
+	else if(steps<10.1)
+	{
+		ui.radio01->setChecked(false);
+		ui.radio1->setChecked(false);
+		ui.radio10->setChecked(true);
+	}
+	
+	f=settings.value("f", 1000.0).toDouble(&ok);
+	if(!ok)
+		f=1000.0;
+	ui.editF->setText(QString::number(f));
+	
+	targetTempBed=settings.value("targetTempBed", 110.0).toDouble(&ok);
+	if(!ok)
+		targetTempBed=110.0;
+	ui.editTempBed->setText(QString::number(targetTempBed));
+
+	targetTempExtruder=settings.value("targetTempExtruder", 110.0).toDouble(&ok);
+	if(!ok)
+		targetTempExtruder=210.0;
+	ui.editTempExtruder->setText(QString::number(targetTempExtruder));
+	
+	ui.editFile->setText(settings.value("fileName", "").toString());
+	
+	autoOpenPort=settings.value("autoOpenPort", false).toBool();
+	ui.checkAutoOpenPort->setChecked(autoOpenPort);
+}
+
+void RepRapMiniHost::storeValues()
+{
+	if(debug)
+		cout<<"Storing values..."<<endl;
+	
+	QCoreApplication::setOrganizationName("RepRap");
+	QCoreApplication::setOrganizationDomain("reprap.org");
+	QCoreApplication::setApplicationName("RepRap Minihost");
+	QSettings settings;
+	
+	settings.setValue("debug", debug);
+	settings.setValue("extrudeWhenMoving", extrudeWhenMoving);
+	settings.setValue("autoRefreshTemperatures", autoRefreshTemperatures);
+	settings.setValue("enableHashes", ui.checkEnableHashes->isChecked());
+	settings.setValue("comPort", ui.editComPort->text());
+	settings.setValue("comBaud", ui.editComBaud->text());
+	settings.setValue("steps", steps);
+	settings.setValue("f", ui.editF->text());
+	settings.setValue("targetTempBed", targetTempBed);
+	settings.setValue("targetTempExtruder", targetTempExtruder);
+	settings.setValue("fileName", ui.editFile->text());
+	settings.setValue("autoOpenPort", autoOpenPort);
 }
 
 /*
@@ -484,3 +584,16 @@ void RepRapMiniHost::onCheckDebugging(int status)
 		repRapHost.setDebug(false);
 	}
 }
+
+void RepRapMiniHost::onCheckAutoOpenPort(int value)
+{
+	if(value==Qt::Checked)
+	{
+		autoOpenPort=true;
+	}
+	else
+	{
+		autoOpenPort=false;
+	}
+}
+

@@ -34,6 +34,7 @@
 #include <boost/spirit/include/phoenix_stl.hpp>
 
 RepRapHost::RepRapHost() :
+comStatus(STANDBY),
 remainingTime(0.0),
 tempExtruder(0.0),
 tempBed(0.0),
@@ -239,6 +240,7 @@ void RepRapHost::timerTick()
 			return;
 		command=commands[0];
 		command.command+="\n";
+		comPort.clearBuffers();  // Make shure there is nothing old left in the buffer
 		comPort.write((char*)command.command.c_str(), command.command.length());
 		remainingTime-=command.time;
 		commands.erase(commands.begin());
@@ -283,7 +285,7 @@ void RepRapHost::timerTick()
 			else if(strTempType=="B")
 				tempBed=temp;
 			else
-				cout<<"Unable to interprete temperature the answer: "<<what[0]<<endl;
+				cout<<"Unable to interprete thw temperature answer: "<<what[0]<<endl;
 			if(debug)
 				cout<<"Temp type: "<<strTempType<<", Temp: "<<temp<<endl;
 			start = what[0].second;

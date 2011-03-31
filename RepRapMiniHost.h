@@ -23,6 +23,7 @@
 #include <QString>
 #include <QTimer>
 #include <QTime>
+#include <QSettings>
 #include <vector>
 #include <string>
 #include <iostream>
@@ -47,6 +48,8 @@ public:
     ~RepRapMiniHost();
 
 protected:
+    void restoreValues();
+    void storeValues();
     void readPos();
     void addPos(float dx, float dy, float dz, float de, bool autoCalcde=false);
     void setXYZ();
@@ -69,6 +72,7 @@ protected:
     float targetTempExtruder;
     float targetTempBed;
     bool debug;
+    bool autoOpenPort;
     
 private:
     Ui::RepRapMiniHostClass ui;
@@ -104,6 +108,7 @@ private slots:
 	void onButtonTempExtruder();
 	void onButtonTempBed();
 	void editTempBedChanged(QString value);
+	void onCheckAutoOpenPort(int value);
 };
 
 #endif // REPRAPMINIHOST_H
