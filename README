@@ -4,10 +4,6 @@ RepRap Minihost
 The RepRap Minihost is a control and g-code file transmitter 
 for RepRap 3D printers.
 The program is written in C++ using the Qt and boost library.
-At the moment you cannot use the newes boost library version.
-For me it works with 1.40, 1.44 does not work. Live with that 
-or suggest a patch ;) I will take care of this as soon as
-possible.
 
 
 ==Compiling on Linux==

@@ -12,7 +12,7 @@
  * GNU General Public License for more details.
  * 
  * You should have received a copy of the GNU General Public License
- * along with Foobar.  If not, see <http://www.gnu.org/licenses/>.
+ * along with RepRap Minihost.  If not, see <http://www.gnu.org/licenses/>.
  * 
  * The RepRapHost class is a simple g-code transmitter to a RepRap
  * or a similar 3D printer.
@@ -40,13 +40,17 @@ tempExtruder(0.0),
 tempBed(0.0),
 tempExpression("([A-Z]): *([0-9]+.?[0-9]*)"),
 nextLineNumber(0),
-x(0.0),
-y(0.0),
-z(0.0),
-f(0.0),
-e(0.0),
 hashEnabled(true),
-debug(false)
+debug(false),
+hardwareX(0.0),
+hardwareY(0.0),
+hardwareZ(0.0),
+hardwareF(0.0),
+lastX(0.0),
+lastY(0.0),
+lastZ(0.0),
+lastF(0.0),
+lastE(0.0)
 {
 	
 }
@@ -95,8 +99,11 @@ double RepRapHost::getRemainingTime()
 	return remainingTime;
 }
 
-Command* RepRapHost::addCommand(string cmdStr, bool putAtEnd)
+Command* RepRapHost::addCommand(string cmdStr, bool putAtEnd, bool removeWhenDouble)
 {
+	if(removeWhenDouble && commands.size()>0 && commands[0].command==cmdStr)
+		return &commands[0];
+		
 	namespace qi = boost::spirit::qi;
 	namespace ascii = boost::spirit::ascii;
 	namespace phoenix = boost::phoenix;
@@ -110,11 +117,11 @@ Command* RepRapHost::addCommand(string cmdStr, bool putAtEnd)
 	
 	int g=-1;
 	int m=-1;
-	double newX=x;
-	double newY=y;
-	double newZ=z;
-	double newF=f;
-	double newE=e;
+	double newX=lastX;
+	double newY=lastY;
+	double newZ=lastZ;
+	double newF=lastF;
+	double newE=lastE;
 	if(debug)
 		cout<<"New command: "<<cmdStr<<endl;
 	cmdStr=toUpper(cmdStr);
@@ -162,14 +169,16 @@ Command* RepRapHost::addCommand(string cmdStr, bool putAtEnd)
 	commandStruct.command=hashedCommand;
 	commandStruct.m=m;
 	commandStruct.g=g;
+	commandStruct.x=newX;
+	commandStruct.y=newY;
+	commandStruct.z=newZ;
+	commandStruct.f=newF;
 	
 	// Calculate the time this command will need
 	double dx;
 	double dy;
 	double dz;
 	double distance;
-	//cout<<"m: "<<m<<endl;
-	//cout<<"g: "<<g<<endl;
 	
 	if(newF==0.0)
 	{
@@ -189,9 +198,9 @@ Command* RepRapHost::addCommand(string cmdStr, bool putAtEnd)
 		break;
 	case 1:  // G1 command
 	case 0:  // G0 command
-		dx=x-newX;
-		dy=y-newY;
-		dz=z-newZ;
+		dx=lastX-newX;
+		dy=lastY-newY;
+		dz=lastZ-newZ;
 		distance=sqrt(dx*dx+dy*dy+dz*dz);
 		commandStruct.time=distance/newF*60.0;
 		break;
@@ -200,11 +209,11 @@ Command* RepRapHost::addCommand(string cmdStr, bool putAtEnd)
 	}
 	if(debug)
 		cout<<"Calculated time for command: "<<commandStruct.time<<" seconds"<<endl;
-	x=newX;
-	y=newY;
-	z=newZ;
-	f=newF;
-	e=newE;
+	lastX=newX;
+	lastY=newY;
+	lastZ=newZ;
+	lastF=newF;
+	lastE=newE;
 	remainingTime+=commandStruct.time;
 	if(putAtEnd)
 	{
@@ -218,11 +227,6 @@ Command* RepRapHost::addCommand(string cmdStr, bool putAtEnd)
 	}
 }
 
-/*Command* RepRapHost::addCommandG1(double x, double y, double z, double f, bool extrude)
-{
-	return NULL;
-}*/
-
 void RepRapHost::timerTick()
 {
 	if(!comPort.isOpended())
@@ -234,6 +238,9 @@ void RepRapHost::timerTick()
 	string answer;
 	char* buffer;
 	int size;
+	
+	comPort.poll();
+	
 	if(comStatus==STANDBY)
 	{
 		if(!commands.size())
@@ -242,10 +249,18 @@ void RepRapHost::timerTick()
 		command.command+="\n";
 		comPort.clearBuffers();  // Make shure there is nothing old left in the buffer
 		comPort.write((char*)command.command.c_str(), command.command.length());
+		hardwareX=command.x;
+		hardwareY=command.y;
+		hardwareZ=command.z;
+		hardwareF=command.f;
+		
+		
 		remainingTime-=command.time;
 		commands.erase(commands.begin());
 		if(command.m==105)
 			comStatus=WAITING_FOR_TEMP;
+		else if(command.m==109 || command.m==116)
+			comStatus=WAITING_FOR_TEMP_ACHIEVED;
 		else
 			comStatus=WAITING_FOR_OK;
 		if(debug)
@@ -257,7 +272,16 @@ void RepRapHost::timerTick()
 		buffer=new char[1024];
 		size=comPort.readUntil(buffer, 1000, (char*)"\n", 1, false);
 		if(size<=0)
+		{
+			delete[] buffer;
 			return;
+		}
+		buffer[size]=0;
+		if(string(buffer).find("ok")!=string::npos)
+		{
+			delete[] buffer;
+			return;
+		}
 		//cout<<"answer size: "<<size<<endl;
 		buffer[size-1]=0;
 		answer=buffer;
@@ -300,13 +324,31 @@ void RepRapHost::timerTick()
 		comPort.clearBuffers();
 		comStatus=STANDBY;
 	}
+	else if(comStatus==WAITING_FOR_TEMP_ACHIEVED)
+	{
+		// TODO: A timeout is missing
+		buffer=new char[1024];
+		size=comPort.readUntil(buffer, 1000, (char*)"achieved", 1, false);
+		if(size<=0)
+		{
+			delete[] buffer;
+			return;
+		}
+		if(debug)
+			cout<<"Temperature is achieved, continuing..."<<endl;
+		comPort.clearBuffers();
+		comStatus=STANDBY;
+	}
 	else if(comStatus==WAITING_FOR_OK)
 	{
 		// TODO: A timeout is missing
 		buffer=new char[1024];
 		size=comPort.readUntil(buffer, 1000, (char*)"\n", 1, false);
 		if(size<=0)
+		{
+			delete[] buffer;
 			return;
+		}
 		buffer[size-1]=0;
 		answer=buffer;
 		delete[] buffer;
@@ -391,35 +433,6 @@ string RepRapHost::getHash(string cmd)
 	return hash;
 }
 
-void RepRapHost::setXYZF(double x, double y, double z, double f, double e)
-{
-	this->x=x;
-	this->y=y;
-	this->z=z;
-	this->f=f;
-	this->e=e;
-}
-
-double RepRapHost::getX()
-{
-	return x;
-}
-
-double RepRapHost::getY()
-{
-	return y;
-}
-
-double RepRapHost::getZ()
-{
-	return z;
-}
-
-double RepRapHost::getF()
-{
-	return f;
-}
-
 double RepRapHost::getTempExtruder()
 {
 	return tempExtruder;
@@ -434,4 +447,27 @@ void RepRapHost::clear()
 {
 	commands.clear();
 	remainingTime=0.0;
+}
+
+iostream& RepRapHost::enableConsoleStream()
+{
+	return comPort.enableStream();
+}
+
+void RepRapHost::disableConsoleStream()
+{
+	comPort.disableStream();
+}
+
+int RepRapHost::commandsLeft()
+{
+	return commands.size();
+}
+
+void RepRapHost::getXYZF(double& x, double& y, double& z, double& f)
+{
+	x=this->hardwareX;
+	y=this->hardwareY;
+	z=this->hardwareZ;
+	f=this->hardwareF;
 }

@@ -12,7 +12,7 @@
  * GNU General Public License for more details.
  * 
  * You should have received a copy of the GNU General Public License
- * along with Foobar.  If not, see <http://www.gnu.org/licenses/>.
+ * along with RepRap Minihost.  If not, see <http://www.gnu.org/licenses/>.
  *
  * The RepRapMiniHost is a control and g-code transmitter for 3D printers
  * (and maybe other g-code style machines), special developed for the
@@ -28,13 +28,14 @@
  * boost header only lib.
  * For more information see the README file provided with this sources.
  * 
- * TODO: Aktualisierung der Positionen im Fenster durch Dateien
+ * TODO: Funktion zum lesen der Position (M114)
  */
 
 #include "RepRapMiniHost.h"
 #include <QFileDialog>
 #include <QFile>
 #include <QTextStream>
+#include <QScrollBar>
 
 RepRapMiniHost::RepRapMiniHost(QWidget *parent)
     : QMainWindow(parent),
@@ -44,6 +45,7 @@ RepRapMiniHost::RepRapMiniHost(QWidget *parent)
       z(0.0),
       f(0.0),
       remainingTimeCounter(0),
+      commandsAtExecute(-1),
       boardAnswerTimout(5000),
       tempReadTime(2000),
       autoRefreshTemperatures(true),
@@ -51,7 +53,8 @@ RepRapMiniHost::RepRapMiniHost(QWidget *parent)
       targetTempExtruder(230.0),
       targetTempBed(120.0),
       debug(true),
-      autoOpenPort(false)
+      autoOpenPort(false),
+      extruderPos(0.0)
 {
 	ui.setupUi(this);
 	
@@ -71,6 +74,14 @@ RepRapMiniHost::RepRapMiniHost(QWidget *parent)
 	remainingTimeTimer = new QTimer(this);
 	connect(remainingTimeTimer, SIGNAL(timeout()), this, SLOT(onRemainingTimeTimer()));
 	remainingTimeTimer->setInterval(1000);
+	
+	consoleTimer = new QTimer(this);
+	connect(consoleTimer, SIGNAL(timeout()), this, SLOT(onConsoleTimer()));
+	consoleTimer->setInterval(100);
+	consoleTimer->start();
+	
+	ui.comboCommand->installEventFilter(&manualCommandFilter);
+	connect(&manualCommandFilter, SIGNAL(returnHit()), this, SLOT(onButtonSend()));
 
 	restoreValues();
 	
@@ -114,8 +125,17 @@ void RepRapMiniHost::restoreValues()
 	bool enableHashes=settings.value("enableHashes", false).toBool();
 	ui.checkEnableHashes->setChecked(enableHashes);
 	
-	ui.editComPort->setText(settings.value("comPort", "/dev/ttyUSB0").toString());
-	ui.editComBaud->setText(settings.value("comBaud", "19200").toString());
+	bool relativeExtruder=settings.value("relativeExtruder", true).toBool();
+	ui.checkRelativeExtruder->setChecked(relativeExtruder);
+	
+#ifdef Q_WS_WIN
+	QString defaultPort("COM0");
+#else
+	QString defaultPort("/dev/ttyUSB0");
+#endif
+	
+	ui.editComPort->setText(settings.value("comPort", defaultPort).toString());
+	ui.editComBaud->setText(settings.value("comBaud", "115200").toString());
 	
 	bool ok;
 	steps=settings.value("steps", 1.0).toDouble(&ok);
@@ -183,6 +203,7 @@ void RepRapMiniHost::storeValues()
 	settings.setValue("targetTempExtruder", targetTempExtruder);
 	settings.setValue("fileName", ui.editFile->text());
 	settings.setValue("autoOpenPort", autoOpenPort);
+	settings.setValue("relativeExtruder", ui.checkRelativeExtruder->isChecked());
 }
 
 /*
@@ -193,10 +214,9 @@ void RepRapMiniHost::onTempTimer()
 {
 	if(!repRapHost.isConnected())
 		return;
-	// TODO: Check if the last added command was already a temperature command, then do not add it
-	repRapHost.addCommand("M105", false);
-	ui.labelTempExtruder->setText(QString::number(repRapHost.getTempExtruder()));
-	ui.labelTempBed->setText(QString::number(repRapHost.getTempBed()));
+	repRapHost.addCommand("M105", false, true);
+	ui.labelTempExtruder->setText(QString::number(repRapHost.getTempExtruder())+trUtf8("°C"));
+	ui.labelTempBed->setText(QString::number(repRapHost.getTempBed())+trUtf8("°C"));
 }
 
 void RepRapMiniHost::onTickTimer()
@@ -226,6 +246,14 @@ void RepRapMiniHost::onRemainingTimeTimer()
 	if(hours<10)
 		strHours=tr("0")+strHours;
 	ui.labelLeft->setText(tr("Left: ")+strHours+tr(":")+strMinutes+tr(":")+strSeconds);
+	
+	// refresh progress bar
+	if(commandsAtExecute>0)
+	{
+		ui.progressBar->setMaximum(commandsAtExecute);
+		ui.progressBar->setValue(commandsAtExecute-repRapHost.commandsLeft());
+	}
+	
 }
 
 void RepRapMiniHost::onButtonCom()
@@ -355,6 +383,15 @@ void RepRapMiniHost::setXYZ()
 	ui.editZ->setText(QString::number(z));
 }
 
+void RepRapMiniHost::getHostXYZF()
+{
+	repRapHost.getXYZF(x, y, z, f);
+	ui.editX->setText(QString::number(x));
+	ui.editY->setText(QString::number(y));
+	ui.editZ->setText(QString::number(z));
+	ui.editF->setText(QString::number(f));
+}
+
 void RepRapMiniHost::addPos(float dx, float dy, float dz, float de, bool autoCalcde)
 {
 	if(!repRapHost.isConnected())
@@ -365,7 +402,14 @@ void RepRapMiniHost::addPos(float dx, float dy, float dz, float de, bool autoCal
 	y+=dy;
 	z+=dz;
 	if(autoCalcde)
+	{
 		de=sqrt(dx*dx+dy*dy+dz*dz);
+	}
+	if(!ui.checkRelativeExtruder->isChecked())
+	{
+		de+=extruderPos;
+		extruderPos=de;
+	}
 	setXYZ();
 	repRapHost.addCommand(string("G1 X")+repRapHost.double2String(x) + string(" Y")+repRapHost.double2String(y) + string(" Z")+repRapHost.double2String(z) + string(" F")+repRapHost.double2String(f) + string(" E")+repRapHost.double2String(de));
 }
@@ -373,6 +417,7 @@ void RepRapMiniHost::addPos(float dx, float dy, float dz, float de, bool autoCal
 void RepRapMiniHost::onButtonHomeX()
 {
 	repRapHost.addCommand("G28 X0");
+	repRapHost.addCommand("G92 X0");
 	x=0.0;
 	ui.editX->setText(tr("0"));
 }
@@ -380,6 +425,7 @@ void RepRapMiniHost::onButtonHomeX()
 void RepRapMiniHost::onButtonHomeY()
 {
 	repRapHost.addCommand("G28 Y0");
+	repRapHost.addCommand("G92 Y0");
 	y=0.0;
 	ui.editY->setText(tr("0"));
 }
@@ -387,6 +433,7 @@ void RepRapMiniHost::onButtonHomeY()
 void RepRapMiniHost::onButtonHomeZ()
 {
 	repRapHost.addCommand("G28 Z0");
+	repRapHost.addCommand("G92 Z0");
 	z=0.0;
 	ui.editZ->setText(tr("0"));
 }
@@ -394,6 +441,7 @@ void RepRapMiniHost::onButtonHomeZ()
 void RepRapMiniHost::onButtonHomeAll()
 {
 	repRapHost.addCommand("G28");
+	repRapHost.addCommand("G92");
 	ui.editX->setText(tr("0"));
 	ui.editY->setText(tr("0"));
 	ui.editZ->setText(tr("0"));
@@ -522,7 +570,7 @@ void RepRapMiniHost::editTempBedChanged(QString value)
 
 void RepRapMiniHost::onButtonBrowse()
 {
-	QString fileName=QFileDialog::getOpenFileName(this, "G-Code File to execute", ".", "*.*");
+	QString fileName=QFileDialog::getOpenFileName(this, "G-Code File to execute", ui.editFile->text(), "*.*");
 	if(fileName=="")
 		return;
 	ui.editFile->setText(fileName);
@@ -546,7 +594,7 @@ void RepRapMiniHost::onButtonExecute()
 			line=stream.readLine(0);
 			continue;
 		}
-		// TODO: Remove comments
+		
 		int commentPos=line.indexOf(";");
 		if(commentPos>=0)
 		{
@@ -564,11 +612,14 @@ void RepRapMiniHost::onButtonExecute()
 	}
 	if(debug)
 		cout<<"reading file finished..."<<endl;
+	commandsAtExecute = repRapHost.commandsLeft();
 }
 
 void RepRapMiniHost::onButtonStop()
 {
 	repRapHost.clear();
+	//repRapHost.addCommand("M112"); // send emergency stop command // not possible, it freezes the whole board
+	getHostXYZF();
 }
 
 void RepRapMiniHost::onCheckDebugging(int status)
@@ -596,4 +647,49 @@ void RepRapMiniHost::onCheckAutoOpenPort(int value)
 		autoOpenPort=false;
 	}
 }
+
+void RepRapMiniHost::onConsoleTimer()
+{
+	int read;
+	static QString consoleText=tr("");
+	iostream& stream=repRapHost.enableConsoleStream();
+	do
+	{
+		char buffer[1000];
+		stream.readsome(buffer, 999);
+		read=stream.gcount();
+		if(read>0)
+		{
+			buffer[read]=0;
+			QString strBuffer(buffer);
+			consoleText+=strBuffer;
+			QScrollBar* scroll = ui.editLog->verticalScrollBar();
+			//int oldPos=scroll->sliderPosition();
+			//int oldMaxPos=scroll->maximum();
+			//QTextCursor oldCursor = ui.editLog->textCursor();
+			//if(oldPos==oldMaxPos)
+			//{
+				ui.editLog->setPlainText(consoleText);
+				scroll->setSliderPosition(scroll->maximum());
+			//}
+			//else
+			//	scroll->setSliderPosition(oldPos);
+			//ui.editLog->setTextCursor(oldCursor);
+			//scroll->setSliderPosition(scroll->maximum());
+		}
+	} while(read>0);
+}
+
+void RepRapMiniHost::onButtonSend()
+{
+	repRapHost.addCommand(ui.comboCommand->currentText().toStdString());
+	if(ui.comboCommand->itemText(0)!=ui.comboCommand->currentText())
+	{
+		ui.comboCommand->insertItem(0, ui.comboCommand->currentText());
+		ui.comboCommand->setCurrentIndex(0);
+	}
+}
+
+
+
 

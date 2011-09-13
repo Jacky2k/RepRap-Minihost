@@ -26,6 +26,9 @@ along with BoostComPort.  If not, see <http://www.gnu.org/licenses/>.
 #include <iostream>
 #include <boost/timer.hpp>
 
+#include <iostream>
+#include <sstream>
+
 #define BUFFER_SIZE 1000000
 #define EVENTBUFFER_SIZE 1000000
 
@@ -52,6 +55,9 @@ public:
 	void poll();
 	void clearBuffers();
 	boost::system::error_code& getLastError();
+	
+	iostream& enableStream();
+	void disableStream();
 
 private:
 	void onPortRead(const boost::system::error_code& error, std::size_t bytes_transferred);
@@ -64,6 +70,10 @@ private:
 	boost::asio::serial_port serialPort;
 	boost::system::error_code ec;
 	boost::system::error_code lastError;
+	
+	stringbuf consoleStreamBuffer;
+	iostream consoleStream;
+	bool streamEnabled;
 protected:
 
 };

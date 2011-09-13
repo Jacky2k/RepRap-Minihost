@@ -12,7 +12,7 @@
  * GNU General Public License for more details.
  * 
  * You should have received a copy of the GNU General Public License
- * along with Foobar.  If not, see <http://www.gnu.org/licenses/>.
+ * along with RepRap Minihost.  If not, see <http://www.gnu.org/licenses/>.
  */
 
 #ifndef REPRAPHOST_H_
@@ -31,13 +31,15 @@ struct Command
 	double time;
 	int m;
 	int g;
+	double x, y, z, f;
 };
 
 enum ComStatus
 {
 	STANDBY=0,
 	WAITING_FOR_OK,
-	WAITING_FOR_TEMP
+	WAITING_FOR_TEMP,
+	WAITING_FOR_TEMP_ACHIEVED
 };
 
 class RepRapHost {
@@ -54,10 +56,8 @@ public:
 	void setNextLineNumber(int nextLineNumber);
 	void refreshRemainingTime();
 	double getRemainingTime();
-	Command* addCommand(string command, bool putAtEnd=true);
-	//Command* addCommandG1(double x, double y, double z, double f, bool extrude=true);
+	Command* addCommand(string command, bool putAtEnd=true, bool removeWhenDouble=false);
 	
-	void setXYZF(double x, double y, double z, double f, double e=0.0);
 	double getX();
 	double getY();
 	double getZ();
@@ -78,6 +78,12 @@ public:
 	string double2String(double value);
 	double string2Double(string value);
 	
+	iostream& enableConsoleStream();
+	void disableConsoleStream();
+	
+	int commandsLeft();
+	void getXYZF(double& x, double& y, double& z, double& f);
+	
 protected:
     ComStatus comStatus;
     BoostComPort comPort;
@@ -89,10 +95,12 @@ protected:
 	boost::regex tempExpression;
 	
 	int nextLineNumber;
-	double x,y,z,f,e;
 	// configuration
 	bool hashEnabled;
 	bool debug;
+	
+	double hardwareX, hardwareY, hardwareZ, hardwareF;
+	double lastX, lastY, lastZ, lastF, lastE;
 };
 
 #endif /* REPRAPHOST_H_ */

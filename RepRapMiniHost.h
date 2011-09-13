@@ -12,7 +12,7 @@
  * GNU General Public License for more details.
  * 
  * You should have received a copy of the GNU General Public License
- * along with Foobar.  If not, see <http://www.gnu.org/licenses/>.
+ * along with RepRap Minihost.  If not, see <http://www.gnu.org/licenses/>.
  */
 
 #ifndef REPRAPMINIHOST_H
@@ -28,8 +28,8 @@
 #include <string>
 #include <iostream>
 #include "ui_RepRapMiniHost.h"
-#include "BoostComPort.hpp"
 #include "RepRapHost.h"
+#include "ManualCommandFilter.h"
 
 using namespace std;
 
@@ -54,6 +54,7 @@ protected:
     void addPos(float dx, float dy, float dz, float de, bool autoCalcde=false);
     void setXYZ();
     int getXYZF();
+    void getHostXYZF();
     
     double steps;
     RepRapHost repRapHost;
@@ -64,6 +65,11 @@ protected:
     QTimer* remainingTimeTimer;
     int remainingTimeCounter;
     
+    QTimer* consoleTimer;
+    ManualCommandFilter manualCommandFilter;
+    
+    int commandsAtExecute;  // Number of commands after the execute command, used to calculate the progress bar
+    
     //configuration
     int boardAnswerTimout; // timeout for answer of the board in milliseconds, 0=no timeout
     int tempReadTime;   // time in milliseconds between each temperature read
@@ -73,6 +79,8 @@ protected:
     float targetTempBed;
     bool debug;
     bool autoOpenPort;
+    
+    double extruderPos; // position of the extruder when using absolute extruder
     
 private:
     Ui::RepRapMiniHostClass ui;
@@ -109,6 +117,8 @@ private slots:
 	void onButtonTempBed();
 	void editTempBedChanged(QString value);
 	void onCheckAutoOpenPort(int value);
+	void onConsoleTimer();
+	void onButtonSend();
 };
 
 #endif // REPRAPMINIHOST_H

@@ -1,5 +1,5 @@
+* Under Windows the Close button does not close the com port, it is not possible to open it afterwards, even from an other program like Hyperterminal
+* Reduce CPU load
 * do the TODOs in the source files marked with // TODO:
-* detection if the program is running in Windows, Linux or Mac for using different default com port names
-* remember the last settings after a restart
 * implement some command line parameters for settings, loading a g-code file, ...
 

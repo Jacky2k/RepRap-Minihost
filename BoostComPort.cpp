@@ -23,7 +23,9 @@ along with BoostComPort.  If not, see <http://www.gnu.org/licenses/>.
 
 BoostComPort::BoostComPort():
 currentContent(0),
-serialPort(io_service)
+serialPort(io_service),
+consoleStream(&consoleStreamBuffer),
+streamEnabled(false)
 {
 	lastError.clear();
 	buffer=new char[BUFFER_SIZE];
@@ -94,7 +96,7 @@ int BoostComPort::close()
 		currentContent=0;
 		return -1;
 	}
-	//io_service.reset();  // don't know why this is needed but without it's not working
+	io_service.reset();  // don't know why this is needed but without it's not working
 	currentContent=0;
 	return 0;
 }
@@ -113,6 +115,7 @@ int BoostComPort::write(char* data, unsigned int length)
 		cerr<<"Failed to write all data to serial port!"<<endl;
 		return -1;
 	}
+	consoleStream.write(data, length);
 	return 0;
 }
 
@@ -207,6 +210,12 @@ void BoostComPort::onPortRead(const boost::system::error_code& error, std::size_
 		memcpy(buffer+currentContent, eventBuffer, bytes_transferred);
 		currentContent+=bytes_transferred;
 		//cout<<"Received "<<bytes_transferred<<" bytes"<<endl;
+		if(streamEnabled)
+		{
+			consoleStream.write(eventBuffer, bytes_transferred);
+			if(consoleStream.bad())
+				cout<<"ConsoleStream is bad!"<<endl;
+		}
 	}
 	else if(error!=boost::asio::error::operation_aborted)  // not cancelled
 	{
@@ -234,3 +243,15 @@ void BoostComPort::clearBuffers()
 {
 	currentContent=0;
 }
+
+iostream& BoostComPort::enableStream()
+{
+	streamEnabled=true;
+	return consoleStream;
+}
+
+void BoostComPort::disableStream()
+{
+	streamEnabled=false;
+}
+
