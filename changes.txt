@@ -1,0 +1,8 @@
+0.1 => 0.2
+	* Added a Terminal where you can see ALL data transferred over the serial port
+	* It is possible to send custom commands in a text edit field
+	* Some bugfixes to support different firmwares (FiveD and Teacup)
+	* All configurations are remembered after a restart
+	* Extruder can be realtive or absolute
+	* Processbar is now working
+
